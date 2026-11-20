@@ -742,6 +742,12 @@ class EvidenceLedger:
         facts = []
         for entry in self.unverified_external_effects():
             tool = str(entry.get("tool") or "external operation")
+            # Read-only email operations do not need external-mutation disclosures.
+            if tool in {
+                "search_emails", "mcp__email__search_emails",
+                "read_email", "mcp__email__read_email",
+            }:
+                continue
             execution = entry["assessment"].execution
             if execution is ExecutionOutcome.REPORTED_SUCCESS:
                 facts.append(f"External operation {tool} reported success; any external change it made was "

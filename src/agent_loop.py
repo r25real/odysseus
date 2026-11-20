@@ -72,7 +72,6 @@ from src.tool_capabilities import (
     blocked_tool_result,
     capabilities_for_action,
     capabilities_for_tool,
-    messages_contain_external_untrusted_context,
     tool_result_is_successful,
     tool_result_should_arm_gate,
 )
@@ -21196,14 +21195,17 @@ async def stream_agent_loop(
                 client_runtime_context.pop(_key, None)
         logger.info("[agent-intent] SFT fixture owner=%s disabled workspace/TUI tool routing", owner)
 
-    run_security = ToolRunSecurityContext(
-        external_untrusted_context_seen=(
+    # Record which initial messages taint the run, not just that one did: the
+    # route context observed later may have trimmed them away, and the
+    # control-plane read exception needs their sources.
+    run_security = ToolRunSecurityContext.for_initial_messages(
+        messages,
+        prior_external_untrusted_context_seen=(
             bool(external_untrusted_context_seen)
             or bool(
                 exact_approval
                 and exact_approval.pending.external_untrusted_context_seen
             )
-            or messages_contain_external_untrusted_context(messages)
         ),
         approval_gate_bypassed=bool(
             exact_approval and exact_approval.allow_remaining_actions
@@ -26601,7 +26603,6 @@ async def stream_agent_loop(
                     "manage_research",
                     "create_document",
                     "mcp__email__ai_draft_email_reply",
-                    "mcp__email__read_email",
                     "mcp__email__search_emails",
                     "mcp__email__mark_email_read",
                     "mcp__email__archive_email",
@@ -34298,18 +34299,10 @@ async def stream_agent_loop(
                             _reply_uid,
                         )
                 else:
-                    _email_read_summary = _email_read_summary_from_tool_output(_email_read_output)
-                    if _email_read_summary:
-                        full_response = _email_read_summary
-                        round_response = ""
-                        yield (
-                            "data: "
-                            + json.dumps({"type": "final_response", "content": _email_read_summary})
-                            + "\n\n"
-                        )
-                        _qwen_terminal_summary_completed = True
-                        _ody_notes_tool_completed = True
-                        logger.info("[agent] completed email read from deterministic terminal summary")
+                    # Pass the complete read_email result back to the model.
+                    # Do not terminate the turn with a deterministic summary.
+                    full_response = ""
+                    round_response = ""
 
             if (
                 block.tool_type in {"resolve_contact", "manage_contact"}
@@ -34636,6 +34629,7 @@ async def stream_agent_loop(
             if (
                 (_ody_qwen_finetune_model or _qwen38_tool_router or _notes_mutation_terminal)
                 and _deterministic_terminal_eligible
+                and block.tool_type not in {"read_email", "mcp__email__read_email"}
                 and tool_result_is_successful(result)
                 and not (
                     _tui_bash_block_completed
