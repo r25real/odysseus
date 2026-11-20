@@ -139,6 +139,7 @@ class TestThinkSuppression:
             monkeypatch, "http://127.0.0.1:11434/v1/chat/completions", "qwen3:14b"
         )
         assert payload.get("think") is False
+        assert payload.get("reasoning_effort") == "none"
 
     def test_no_think_for_ollama_v1_non_thinking_model(self, monkeypatch):
         """think must NOT be set for a plain (non-thinking) model on Ollama /v1."""
@@ -163,6 +164,7 @@ class TestThinkSuppression:
             monkeypatch, "http://127.0.0.1:11435/v1/chat/completions", "qwen3:14b"
         )
         assert payload.get("think") is False
+        assert payload.get("reasoning_effort") == "none"
 
     def test_qwen_tool_router_does_not_receive_ollama_think_override(self, monkeypatch):
         """A local OpenAI-compatible tool-router is not Ollama's /v1 surface."""
